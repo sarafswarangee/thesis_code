@@ -1,93 +1,92 @@
-# Thesis Code
 
+# High-Frequency Gravitational-Wave Detection
+### CNN Autoencoder and Multi-View Signal Classification
 
+Code accompanying **Swarangee Saraf's Master's thesis** at the **University of Bonn**.
+
+This repository contains Python implementations of two machine-learning components developed for the analysis of frequency-domain measurements in a high-frequency gravitational-wave search: a convolutional autoencoder for reconstructing noise spectra and a multi-view classifier that distinguishes noise-only from signal-containing examples.
+
+**Thesis:** [Read the Master's thesis (PDF)](Saraf_Swarangee_Master_s_Thesis.pdf)
+
+## What's in this repository?
+
+| File | Purpose |
+| --- | --- |
+| [`CNN_autoencoder.py`](CNN_autoencoder.py) | Defines the convolutional autoencoder, processes `.tiq` I/Q recordings into spectral-power vectors, and loads saved autoencoder weights. |
+| [`multi_view_classifier.py`](multi_view_classifier.py) | Builds noise/signal datasets, obtains autoencoder reconstructions and reconstruction-error features, and trains a binary classifier. |
+| [`Model Weights/`](Model%20Weights/) | Contains two saved autoencoder weight files (`.weights.h5`). |
+| [`Saraf_Swarangee_Master_s_Thesis.pdf`](Saraf_Swarangee_Master_s_Thesis.pdf) | The accompanying thesis. |
+
+## Method overview
+
+Both scripts process complex I/Q samples in **1,024-sample windows**. They apply a Hann window, compute a centered FFT, and select frequencies between **0.8 MHz and 1.86 MHz** in the recorded signal's frequency representation. The resulting features are squared FFT magnitudes, averaged across subwindows when applicable (`NAVG = 1` in the checked-in configuration). The neural-network implementations expect **78 features per example**.
+
+**CNN autoencoder.** The `CNNAnomalyDetector` model has convolutional encoder and decoder stages. The script prepares training and test spectra, normalizes both using the training-data minimum and maximum, constructs group-mean targets, and **loads previously saved weights**. Its current main block prints dataset and split shapes; it does not train the autoencoder or produce detection metrics.
+
+**Multi-view classifier.** The `MultiViewPSDClassifier` combines three inputs: the spectral-power vector, its autoencoder reconstruction, and a scalar reconstruction-error score (the sum of absolute differences). It uses separate neural-network branches for these inputs, concatenates their learned features, and predicts a binary label: `0` for noise-only data and `1` for signal-containing data. The script uses a stratified 90/10 train/validation split and trains for **30 epochs**, with **batch size 32**.
 
 ## Getting started
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### 1. Clone the repository
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.uni-bonn.de/s14ssara/thesis-code.git
-git branch -M main
-git push -uf origin main
+```bash
+git clone https://github.com/sarafswarangee/thesis_code.git
+cd thesis_code
 ```
 
-## Integrate with your tools
+### 2. Install Python dependencies
 
-* [Set up project integrations](https://gitlab.uni-bonn.de/s14ssara/thesis-code/-/settings/integrations)
+The scripts import **NumPy**, **TensorFlow/Keras**, **scikit-learn**, and **iqtools** (`TIQData`). You can create a Python virtual environment and install these packages:
 
-## Collaborate with your team
+```bash
+python -m venv .venv
+source .venv/bin/activate  # macOS / Linux
+python -m pip install numpy tensorflow scikit-learn iqtools
+```
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+On Windows, activate the environment with `.venv\Scripts\activate` instead. No pinned dependency versions or tested environment specification are currently included, so package compatibility may depend on your Python and TensorFlow versions.
 
-## Test and Deploy
+### 3. Supply the input recordings
 
-Use the built-in continuous integration in GitLab.
+The raw input files are **not included** in this repository. Both scripts currently refer to fixed file paths:
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+- `CNN_autoencoder.py` expects seven `.tiq` recordings directly inside `data/`, with exact filenames specified in `FILE_LIST`.
+- `multi_view_classifier.py` expects four `.tiq` recordings in `data/noise/` (`NOISE_FILES`) and four signal-containing complex I/Q files in `data/signals/` (`SIGNAL_FILES`).
+- The classifier reads its signal-containing `.bin` files as `complex128` values. The current names are `IQData_with_8.1GHz_Chirpe13.bin`, `IQData_with_8.1GHz_Chirpe12.bin`, `IQData_with_8.1GHz_Chirpe10.bin`, and `IQData_with_8.1GHz_Chirpe11.bin`.
 
-***
+Place the appropriate files at those locations, or edit the path lists at the top of the scripts to match your local dataset. The scripts request **112,000,000 I/Q samples per input file**; make sure adequate memory is available.
 
-# Editing this README
+### 4. Set the model-weight paths
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+The repository stores the pretrained weights under `Model Weights/`, but the scripts look under `models/`. **Before running**, either update the `WEIGHTS_PATH` and `AE_WEIGHTS_PATH` variables, or create a `models/` folder and copy these files into it:
 
-## Suggestions for a good README
+| Script | Required weight file |
+| --- | --- |
+| `CNN_autoencoder.py` | `models/1024FWHM8files.weights.h5` |
+| `multi_view_classifier.py` | `models/1024FWHM4_cav.weights.h5` |
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+The original files are in [`Model Weights/`](Model%20Weights/).
 
-## Name
-Choose a self-explaining name for your project.
+### 5. Run the scripts
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+From the repository root, after providing the data and correcting the weight paths:
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+```bash
+python CNN_autoencoder.py
+python multi_view_classifier.py
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+The first script reports the shapes of the processed dataset, training/test splits, and group-mean targets. The second script creates the classifier dataset and runs training, reporting Keras training and validation metrics. These commands **require the external data described above** and have not been validated as a self-contained run from a fresh clone.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## Reproducibility and scope
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+This repository documents the **autoencoder and classifier components** of the thesis analysis. It currently provides model definitions, preprocessing steps, classifier training code, and two saved autoencoder weight files.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+It does **not** currently include the raw cavity recordings, signal-generation/injection scripts, a complete autoencoder training procedure, or the matched-filtering and excess-power benchmark implementations discussed in the wider thesis work. Accordingly, the repository alone is **not a complete end-to-end reproduction** of all thesis results.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+For the broader scientific motivation, methods, and results, see the [thesis PDF](Saraf_Swarangee_Master_s_Thesis.pdf).
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## Author
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+**Swarangee Saraf**  
+M.Sc. Astrophysics, University of Bonn
